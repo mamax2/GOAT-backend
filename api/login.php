@@ -3,7 +3,7 @@
 error_reporting(E_ERROR | E_PARSE);
 ini_set('display_errors', 0);
 
-require __DIR__ . '/cors.php';     // CORS compatibile con withCredentials
+require __DIR__ . '/cors.php';     
 require __DIR__ . '/../config/session.php';
 require __DIR__ . '/../config/database.php';
 
