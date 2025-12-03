@@ -16,10 +16,9 @@ $options = [
 
 try {
   if (is_readable($MAMP_SOCKET)) {
-    // Preferisci il socket (più stabile su macOS)
     $dsn = "mysql:unix_socket=$MAMP_SOCKET;dbname=$DB_NAME;charset=utf8mb4";
   } else {
-    // Fallback TCP sulla porta giusta (8889)
+    // Fallback TCP sulla porta 8889
     $dsn = "mysql:host=127.0.0.1;port=8889;dbname=$DB_NAME;charset=utf8mb4";
   }
   $pdo = new PDO($dsn, $DB_USER, $DB_PASS, $options);
