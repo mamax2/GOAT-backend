@@ -5,8 +5,8 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
   session_set_cookie_params([
     'lifetime' => 60 * 60 * 24 * 7,   // 7 giorni
     'path' => '/',
-    'domain' => 'localhost',        // IMPORTANTISSIMO
-    'secure' => false,              // TRUE solo su HTTPS
+    'domain' => 'localhost',        
+    'secure' => false,             
     'httponly' => true,
     'samesite' => 'Lax'
   ]);
