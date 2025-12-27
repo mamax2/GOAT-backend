@@ -20,7 +20,7 @@ if (!in_array($type, $allowed, true)) {
 }
 
 try {
-  // Base SELECT
+
   $sql = "
     SELECT
       id,
