@@ -4,6 +4,15 @@ require __DIR__ . '/../config/database.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
+/* AUTO-HIDE ANNUNCI SCADUTI */
+$pdo->exec("
+  UPDATE announcements
+  SET is_visible = 0
+  WHERE expires_at IS NOT NULL
+  AND expires_at < NOW()
+  AND is_visible = 1
+");
+
 $type = $_GET['type'] ?? null;
 
 if (!$type) {
@@ -21,40 +30,45 @@ if (!in_array($type, $allowed, true)) {
 
 try {
 
+  $userId = $_SESSION['user']['id'] ?? null;
+
   $sql = "
-    SELECT
-      id,
-      type,
-      title,
-      subtitle,
-      description,
-      category,
-      duration_hours,
-      total_spots,
-      remaining_spots,
-      credits,
-      event_date,
-      event_time,
-      expires_at,
-      cta_label,
-      cta_action,
-      priority,
-      created_at
-    FROM announcements
-    WHERE is_visible = 1
-    AND (expires_at IS NULL OR expires_at >= NOW())
-  ";
+  SELECT
+    id,
+    type,
+    title,
+    subtitle,
+    description,
+    category,
+    duration_hours,
+    total_spots,
+    remaining_spots,
+    credits,
+    event_date,
+    event_time,
+    expires_at,
+    cta_label,
+    cta_action,
+    priority,
+    created_at
+  FROM announcements
+  WHERE is_visible = 1
+  AND (expires_at IS NULL OR expires_at >= NOW())
+  AND (:user_id IS NULL OR created_by != :user_id)
+";
 
-  $params = [];
+  $params = [
+    ':user_id' => $userId,
+  ];
 
-  // Filtro tab
   if ($type === 'lastminute') {
-    // “finiscono in giornata” 
     $sql .= " AND expires_at IS NOT NULL AND DATE(expires_at) = CURDATE() ";
   } else {
     $sql .= " AND type = :type ";
     $params[':type'] = $type;
   }
+
+  $sql .= " ORDER BY expires_at ASC, priority DESC ";
 
   $sql .= " ORDER BY expires_at ASC, priority DESC ";
 
