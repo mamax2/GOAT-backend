@@ -14,6 +14,7 @@ if (in_array($origin, $allowed, true)) {
     header('Vary: Origin');
 }
 
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-ADMIN-KEY');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
