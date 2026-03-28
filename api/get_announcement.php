@@ -59,5 +59,24 @@ if ((int) $a['created_by'] !== $userId) {
     exit;
 }
 
+$availabilities = [];
+$avStmt = $pdo->prepare("
+  SELECT id, avail_date, start_time, end_time
+  FROM announcement_availability
+  WHERE announcement_id = ?
+  ORDER BY avail_date ASC, start_time ASC
+");
+$avStmt->execute([$id]);
+while ($row = $avStmt->fetch(PDO::FETCH_ASSOC)) {
+    $availabilities[] = [
+        'id' => (int) $row['id'],
+        'date' => $row['avail_date'],
+        'start_time' => $row['start_time'],
+        'end_time' => $row['end_time'],
+    ];
+}
+
+$a['availabilities'] = $availabilities;
+
 echo json_encode(['data' => $a]);
 exit;

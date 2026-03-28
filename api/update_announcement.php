@@ -2,6 +2,7 @@
 require __DIR__ . '/cors.php';
 require __DIR__ . '/../config/session.php';
 require __DIR__ . '/../config/database.php';
+require __DIR__ . '/availability_helpers.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -38,35 +39,67 @@ if (!$row || (int) $row['created_by'] !== $userId) {
     exit;
 }
 
-$upd = $pdo->prepare("
-  UPDATE announcements SET
-    title = :title,
-    subtitle = :subtitle,
-    description = :description,
-    category = :category,
-    duration_hours = :duration_hours,
-    total_spots = :total_spots,
-    remaining_spots = :remaining_spots,
-    credits = :credits,
-    event_date = :event_date,
-    event_time = :event_time,
-    updated_at = NOW()
-  WHERE id = :id
-");
+$replaceAvailabilities = array_key_exists('availabilities', $data);
+$availRows = $replaceAvailabilities ? parseAvailabilitiesList($data['availabilities']) : null;
 
-$upd->execute([
-    ':id' => $id,
-    ':title' => $data['title'],
-    ':subtitle' => $data['subtitle'] ?? null,
-    ':description' => $data['description'],
-    ':category' => $data['category'] ?? null,
-    ':duration_hours' => $data['duration_hours'],
-    ':total_spots' => $data['total_spots'],
-    ':remaining_spots' => $data['remaining_spots'],
-    ':credits' => $data['credits'],
-    ':event_date' => $data['event_date'] ?? null,
-    ':event_time' => $data['event_time'] ?? null,
-]);
+$pdo->beginTransaction();
+
+try {
+    $upd = $pdo->prepare("
+      UPDATE announcements SET
+        title = :title,
+        subtitle = :subtitle,
+        description = :description,
+        category = :category,
+        duration_hours = :duration_hours,
+        total_spots = :total_spots,
+        remaining_spots = :remaining_spots,
+        credits = :credits,
+        event_date = :event_date,
+        event_time = :event_time,
+        updated_at = NOW()
+      WHERE id = :id
+    ");
+
+    $upd->execute([
+        ':id' => $id,
+        ':title' => $data['title'],
+        ':subtitle' => $data['subtitle'] ?? null,
+        ':description' => $data['description'],
+        ':category' => $data['category'] ?? null,
+        ':duration_hours' => $data['duration_hours'],
+        ':total_spots' => $data['total_spots'],
+        ':remaining_spots' => $data['remaining_spots'],
+        ':credits' => $data['credits'],
+        ':event_date' => $data['event_date'] ?? null,
+        ':event_time' => $data['event_time'] ?? null,
+    ]);
+
+    if ($replaceAvailabilities) {
+        $pdo->prepare('DELETE FROM announcement_availability WHERE announcement_id = ?')->execute([$id]);
+        if ($availRows !== []) {
+            $ins = $pdo->prepare('
+              INSERT INTO announcement_availability (announcement_id, avail_date, start_time, end_time)
+              VALUES (:aid, :ad, :st, :et)
+            ');
+            foreach ($availRows as $r) {
+                $ins->execute([
+                    ':aid' => $id,
+                    ':ad' => $r['avail_date'],
+                    ':st' => $r['start_time'],
+                    ':et' => $r['end_time'],
+                ]);
+            }
+        }
+    }
+
+    $pdo->commit();
+} catch (Throwable $e) {
+    $pdo->rollBack();
+    http_response_code(500);
+    echo json_encode(['error' => 'Could not update announcement']);
+    exit;
+}
 
 echo json_encode(['success' => true]);
 exit;

@@ -2,6 +2,7 @@
 require __DIR__ . '/cors.php';
 require __DIR__ . '/../config/session.php';
 require __DIR__ . '/../config/database.php';
+require __DIR__ . '/availability_helpers.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -44,6 +45,7 @@ if (!empty($data['is_lastminute'])) {
     $expiresAt = date('Y-m-d 23:59:59');
 }
 
+$availRows = parseAvailabilitiesList($data['availabilities'] ?? null);
 
 $sql = "
 INSERT INTO announcements (
@@ -82,29 +84,57 @@ INSERT INTO announcements (
   :created_by
 )";
 
-$stmt = $pdo->prepare($sql);
+$pdo->beginTransaction();
 
-$stmt->execute([
-    ':type' => $type,
-    ':title' => trim($data['title']),
-    ':subtitle' => $data['subtitle'] ?? null,
-    ':description' => trim($data['description']),
-    ':category' => $data['category'] ?? null,
-    ':duration_hours' => (float) $data['duration_hours'],
-    ':total_spots' => (int) $data['total_spots'],
-    ':remaining_spots' => (int) $data['total_spots'],
-    ':credits' => (int) $data['credits'],
-    ':event_date' => $data['event_date'] ?? null,
-    ':event_time' => $data['event_time'] ?? null,
-    ':expires_at' => $expiresAt,
-    ':cta_label' => $ctaLabel,
-    ':cta_action' => $data['cta_action'] ?? null,
-    ':priority' => !empty($data['is_lastminute']) ? 10 : 0,
-    ':created_by' => $userId,
-]);
+try {
+    $stmt = $pdo->prepare($sql);
+
+    $stmt->execute([
+        ':type' => $type,
+        ':title' => trim($data['title']),
+        ':subtitle' => $data['subtitle'] ?? null,
+        ':description' => trim($data['description']),
+        ':category' => $data['category'] ?? null,
+        ':duration_hours' => (float) $data['duration_hours'],
+        ':total_spots' => (int) $data['total_spots'],
+        ':remaining_spots' => (int) $data['total_spots'],
+        ':credits' => (int) $data['credits'],
+        ':event_date' => $data['event_date'] ?? null,
+        ':event_time' => $data['event_time'] ?? null,
+        ':expires_at' => $expiresAt,
+        ':cta_label' => $ctaLabel,
+        ':cta_action' => $data['cta_action'] ?? null,
+        ':priority' => !empty($data['is_lastminute']) ? 10 : 0,
+        ':created_by' => $userId,
+    ]);
+
+    $announcementId = (int) $pdo->lastInsertId();
+
+    if ($availRows !== []) {
+        $ins = $pdo->prepare('
+          INSERT INTO announcement_availability (announcement_id, avail_date, start_time, end_time)
+          VALUES (:aid, :ad, :st, :et)
+        ');
+        foreach ($availRows as $r) {
+            $ins->execute([
+                ':aid' => $announcementId,
+                ':ad' => $r['avail_date'],
+                ':st' => $r['start_time'],
+                ':et' => $r['end_time'],
+            ]);
+        }
+    }
+
+    $pdo->commit();
+} catch (Throwable $e) {
+    $pdo->rollBack();
+    http_response_code(500);
+    echo json_encode(['error' => 'Could not create announcement']);
+    exit;
+}
 
 echo json_encode([
     'success' => true,
-    'id' => $pdo->lastInsertId(),
+    'id' => $announcementId,
 ]);
 exit;
