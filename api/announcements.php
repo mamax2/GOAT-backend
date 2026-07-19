@@ -1,72 +1,85 @@
 <?php
 require __DIR__ . '/cors.php';
+require __DIR__ . '/../config/session.php';
 require __DIR__ . '/../config/database.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-$type = $_GET['type'] ?? null;
-
-if (!$type) {
-  http_response_code(400);
-  echo json_encode(['error' => 'Missing type']);
+if (!isset($_SESSION['user'])) {
+  http_response_code(401);
+  echo json_encode(['error' => 'Unauthorized']);
   exit;
 }
 
-$allowed = ['richiesta', 'offerta', 'lastminute'];
-if (!in_array($type, $allowed, true)) {
+$userId = (int) $_SESSION['user']['id'];
+$type = $_GET['type'] ?? null;
+
+if (!$type || !in_array($type, ['richiesta', 'offerta', 'lastminute'], true)) {
   http_response_code(400);
   echo json_encode(['error' => 'Invalid type']);
   exit;
 }
 
 try {
+  $params = [
+    ':uid' => $userId,
+  ];
 
   $sql = "
-    SELECT
-      id,
-      type,
-      title,
-      subtitle,
-      description,
-      category,
-      duration_hours,
-      total_spots,
-      remaining_spots,
-      credits,
-      event_date,
-      event_time,
-      expires_at,
-      cta_label,
-      cta_action,
-      priority,
-      created_at
-    FROM announcements
-    WHERE is_visible = 1
-    AND (expires_at IS NULL OR expires_at >= NOW())
-  ";
+      SELECT
+        a.id,
+        a.type,
+        a.title,
+        a.subtitle,
+        a.description,
+        a.category,
+        a.duration_hours,
+        a.total_spots,
+        a.remaining_spots,
+        a.credits,
+        a.event_date,
+        a.event_time,
+        a.expires_at,
+        a.cta_label,
+        a.cta_action,
+        a.priority,
+        a.created_at
+      FROM announcements a
+      WHERE a.is_visible = 1
+        AND (a.expires_at IS NULL OR a.expires_at >= NOW())
+        AND a.created_by != :uid
+    ";
 
-  $params = [];
-
-  // Filtro tab
+  // TAB LOGIC
   if ($type === 'lastminute') {
-    // “finiscono in giornata” 
-    $sql .= " AND expires_at IS NOT NULL AND DATE(expires_at) = CURDATE() ";
+    $sql .= " AND a.expires_at IS NOT NULL AND DATE(a.expires_at) = CURDATE() ";
   } else {
-    $sql .= " AND type = :type ";
+    $sql .= " AND a.type = :type ";
     $params[':type'] = $type;
   }
 
-  $sql .= " ORDER BY expires_at ASC, priority DESC ";
+  $sql .= "
+      ORDER BY
+        CASE WHEN a.expires_at IS NOT NULL THEN 0 ELSE 1 END,
+        a.expires_at ASC,
+        a.priority DESC,
+        a.created_at DESC
+    ";
 
   $stmt = $pdo->prepare($sql);
   $stmt->execute($params);
-  $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-  echo json_encode(['success' => true, 'data' => $rows]);
+  echo json_encode([
+    'success' => true,
+    'data' => $stmt->fetchAll(PDO::FETCH_ASSOC),
+  ]);
   exit;
 
 } catch (Throwable $e) {
   http_response_code(500);
-  echo json_encode(['error' => 'Server error']);
+  echo json_encode([
+    'error' => 'Server error',
+    'debug' => $e->getMessage() // ⬅️ toglilo in prod
+  ]);
   exit;
 }
